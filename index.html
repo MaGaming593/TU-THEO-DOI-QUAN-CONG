@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Theo Dõi Quân Công</title>
+    <!-- Tải thư viện Chart.js để vẽ biểu đồ -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Tải thư viện Tesseract.js cho chức năng OCR (Nhận diện chữ từ ảnh) -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    
+    <!-- Tải thư viện html2canvas để hỗ trợ chụp ảnh màn hình -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f6f9;
+            color: #333;
+        }
+        h2 {
+            text-align: center;
+            color: #2c3e50;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 20px;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .btn-update {
+            background-color: #2e7d32;
+            color: white;
+        }
+        .btn-update:hover {
+            background-color: #1b5e20;
+            transform: translateY(-2px);
+        }
+        .btn-capture {
+            background-color: #0288d1;
+            color: white;
+        }
+        .btn-capture:hover {
+            background-color: #01579b;
+            transform: translateY(-2px);
+        }
+        .btn-manage {
+            background-color: #f57c00;
+            color: white;
+        }
+        .btn-manage:hover {
+            background-color: #e65100;
+            transform: translateY(-2px);
+        }
+        .btn-history {
+            background-color: #607d8b;
+            color: white;
+        }
+        .btn-history:hover {
+            background-color: #455a64;
+            transform: translateY(-2px);
+        }
+        .btn-auth {
+            background-color: #d32f2f;
+            color: white;
+        }
+        .btn-auth:hover {
+            background-color: #b71c1c;
+            transform: translateY(-2px);
+        }
+
+        .manage-modal-box {
+            width: 95%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        /* GIAO DIỆN FORM */
+        .manage-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+        .form-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: flex-end;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .input-group label {
+            font-size: 13px;
+            font-weight: bold;
+            color: #555;
+        }
+        .input-group input {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        .input-group input:focus {
+            border-color: #2196f3;
+        }
+        
+        .stt-group { width: 70px; }
+        .maso-group { width: 100px; }
+        .ten-group { flex: 1; min-width: 160px; }
+        .class-group { width: 120px; }
+        .heso-group { width: 80px; }
+        .diem-group { width: 100px; }
+        
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            flex: 1;
+            justify-content: flex-end;
+            min-width: 180px;
+        }
+        .form-actions button {
+            padding: 10px 20px;
+        }
+
+        .manage-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        .manage-table th {
+            background-color: #f1f3f5;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            padding: 12px;
+            border-bottom: 2px solid #dee2e6;
+        }
+        .manage-table td {
+            padding: 10px;
+            border-bottom: 1px solid #e9ecef;
+            text-align: center;
+        }
+        
+        .action-btn {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn-edit { background-color: #ffb300; color: #fff; }
+        .btn-delete { background-color: #e53935; color: #fff; }
+        
+        /* Style cho phần tải ảnh OCR */
+        .ocr-container {
+            display: none; 
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 12px;
+            border: 2px dashed #b0bec5;
+            transition: background-color 0.3s;
+        }
+        .ocr-container.dragover {
+            background-color: #e3f2fd;
+            border-color: #2196f3;
+        }
+        
+        .upload-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            max-width: 400px;
+            min-height: 120px;
+            cursor: pointer;
+            text-align: center;
+            color: #546e7a;
+            margin-bottom: 15px;
+        }
+        .upload-icon {
+            font-size: 40px;
+            color: #64b5f6;
+            margin-bottom: 10px;
+        }
+        .upload-text {
+            font-size: 16px;
+            font-weight: 500;
+        }
+        .upload-subtext {
+            font-size: 13px;
+            color: #90a4ae;
+            margin-top: 5px;
+        }
+
+        #imageInput {
+            display: none;
+        }
+        
+        #ocrStatus {
+            margin-top: 10px;
+            font-size: 14px;
+            font-weight: bold;
+            text-align: center;
+            min-height: 20px; 
+        }
+
+        .result-area {
+            display: none;
+            width: 100%;
+            max-width: 500px;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 15px;
+        }
+        #ocrResultTextarea {
+            width: 100%;
+            height: 150px;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #cfd8dc;
+            font-family: monospace;
+            font-size: 14px;
+            resize: vertical;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.06);
+        }
+        #ocrResultTextarea:focus {
+            outline: none;
+            border-color: #2196f3;
+            box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+        }
+
+        .chart-container {
+            width: 100%;
+            max-width: 1000px;
+            margin: 0 auto 30px auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            overflow-x: auto; 
+        }
+        .canvas-wrapper {
+            position: relative;
+            width: 100%;
+            min-height: 400px; 
+        }
+
+        .table-container {
+            width: 100%;
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            overflow: hidden;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #e0e0e0;
+            padding: 12px 15px;
+            text-align: center;
+        }
+        th {
+            background-color: #f8f9fa;
+            color: #512da8; 
+            font-weight: bold;
+            font-size: 15px;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+        th:hover {
+            background-color: #e9ecef;
+        }
+        tbody tr:nth-child(even) {
+            background-color: #fbfbfc;
+        }
+        tbody tr:hover {
+            background-color: #f1f3f5;
+        }
+        td:last-child {
+            font-weight: bold;
+            color: #d35400;
+        }
+
+        #toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 16px;
+            position: fixed;
+            z-index: 1000;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            font-size: 15px;
+        }
+        #toast.show {
+            visibility: visible;
+            animation: fadein 0.5s, fadeout 0.5s 2.5s;
+        }
+        @keyframes fadein {
+            from {bottom: 0; opacity: 0;}
+            to {bottom: 30px; opacity: 1;}
+        }
+        @keyframes fadeout {
+            from {bottom: 30px; opacity: 1;}
+            to {bottom: 0; opacity: 0;}
+        }
+
+        /* Style cho Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            animation: fadeIn 0.2s ease-out;
+        }
+        .modal-box {
+            background-color: white;
+            padding: 25px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 450px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            text-align: center;
+            animation: slideDown 0.3s ease-out;
+        }
+        .modal-title {
+            margin-top: 0;
+            color: #d32f2f;
+            font-size: 20px;
+        }
+        .modal-message {
+            margin: 20px 0;
+            font-size: 16px;
+            line-height: 1.5;
+            color: #333;
+            text-align: left;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            word-wrap: break-word;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 25px;
+        }
+        .btn-cancel {
+            background-color: #9e9e9e;
+            color: white;
+        }
+        .btn-cancel:hover { background-color: #757575; }
+        .btn-confirm {
+            background-color: #2e7d32;
+            color: white;
+        }
+        .btn-confirm:hover { background-color: #1b5e20; }
+
+        /* Lịch sử cập nhật CSS */
+        .history-list {
+            max-height: 300px;
+            overflow-y: auto;
+            text-align: left;
+            margin-top: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+        }
+        .history-item {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+        }
+        .history-item:last-child {
+            border-bottom: none;
+        }
+        .history-time {
+            font-weight: bold;
+            color: #0288d1;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        .update-controls, .manage-controls {
+            display: none; 
+        }
+        .admin-only {
+            display: none;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideDown {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Khu vực chức năng OCR Nhận diện ảnh (Dành cho Mod & Admin) -->
+    <div class="ocr-container update-controls" id="dropZone">
+        <label for="imageInput" class="upload-area">
+            <div class="upload-icon">☁️</div>
+            <div class="upload-text">Kéo thả ảnh, dán (Ctrl+V) hoặc click để chọn</div>
+            <div class="upload-subtext">Hỗ trợ nhận diện mã số (VD: M001)</div>
+        </label>
+        <input type="file" id="imageInput" accept="image/*" onchange="handleFileSelect(event)">
+        
+        <div id="ocrStatus"></div>
+
+        <div class="result-area" id="resultArea">
+            <textarea id="ocrResultTextarea" placeholder="Kết quả nhận diện sẽ hiển thị ở đây. Bạn có thể chỉnh sửa thủ công trước khi bấm nút [Cập Nhật Dữ Liệu]..."></textarea>
+        </div>
+    </div>
+
+    <!-- Các nút chức năng chính -->
+    <div class="controls">
+        <button class="btn btn-update update-controls" onclick="updateData()">💾 Cập Nhật Dữ Liệu</button>
+        <button class="btn btn-manage manage-controls" onclick="openManageModal()">⚙️ Quản Lý Danh Sách</button>
+        
+        <button class="btn btn-capture" onclick="takeScreenshot()">📸 Chụp Ảnh Bảng & Biểu Đồ</button>
+        <button class="btn btn-history" onclick="openHistoryModal()">🕒 Lịch Sử Cập Nhật</button>
+        
+        <button class="btn btn-auth" id="authBtn" onclick="toggleAuth()">🔐 Đăng Nhập Quyền Quản Lý</button>
+    </div>
+
+    <!-- KHU VỰC SẼ ĐƯỢC ĐƯA VÀO KHUNG HÌNH CHỤP -->
+    <div id="captureArea" style="padding: 20px; background-color: #f4f6f9;">
+        <h2 style="margin-top: 0;">BẢNG THEO DÕI QUÂN CÔNG</h2>
+
+        <!-- Vùng chứa Canvas cho Biểu đồ -->
+        <div class="chart-container">
+            <div class="canvas-wrapper" id="canvasWrapper">
+                <canvas id="quanCongChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Vùng chứa Bảng dữ liệu -->
+        <div class="table-container">
+            <table id="quanCongTable">
+                <thead>
+                    <tr>
+                        <th onclick="sortData('stt')">STT 🔽</th>
+                        <th onclick="sortData('maSo')">MÃ SỐ 🔽</th>
+                        <th onclick="sortData('ten')">TÊN 🔽</th>
+                        <th onclick="sortData('lop')">Class 🔽</th>
+                        <th onclick="sortData('heSo')">Hệ Số 🔽</th>
+                        <th onclick="sortData('quanCong')">Quân Công 🔽</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Hộp thông báo (Toast) -->
+    <div id="toast">Thông báo ở đây</div>
+
+    <!-- Modal Đăng Nhập Mật Khẩu -->
+    <div id="loginModal" class="modal-overlay">
+        <div class="modal-box" style="max-width: 350px;">
+            <h3 class="modal-title" style="color: #2e7d32;">🔐 Xác Thực Quyền Hạn</h3>
+            <div style="margin: 20px 0;">
+                <input type="password" id="adminPassword" placeholder="Nhập mật khẩu..." style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; text-align: center; outline: none;" onkeydown="if(event.key === 'Enter') checkPassword()">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-cancel" onclick="closeLoginModal()">Hủy</button>
+                <button class="btn btn-confirm" onclick="checkPassword()">Đăng Nhập</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Xác Nhận Cập Nhật -->
+    <div id="confirmModal" class="modal-overlay">
+        <div class="modal-box">
+            <h3 class="modal-title">⚠️ Xác nhận cập nhật</h3>
+            <div id="modalMessage" class="modal-message"></div>
+            <div class="modal-actions">
+                <button class="btn btn-cancel" onclick="closeModal(false)">Bỏ</button>
+                <button class="btn btn-confirm" onclick="closeModal(true)">Xác nhận</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal Lịch Sử Cập Nhật -->
+    <div id="historyModal" class="modal-overlay">
+        <div class="modal-box" style="max-width: 500px;">
+            <h3 class="modal-title" style="color: #0288d1;">🕒 Lịch Sử Cập Nhật Điểm</h3>
+            <div id="historyList" class="history-list">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-cancel" onclick="closeHistoryModal()">Đóng</button>
+                <!-- Chỉ Admin mới được xóa lịch sử -->
+                <button class="btn admin-only" style="background-color: #d32f2f; color: white;" onclick="clearHistory()">Xóa Lịch Sử</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Quản Lý Danh Sách Thành Viên -->
+    <div id="manageModal" class="modal-overlay">
+        <div class="modal-box manage-modal-box">
+            <h3 class="modal-title" style="color: #f57c00;">⚙️ Quản Lý Danh Sách Thành Viên</h3>
+            
+            <form class="manage-form" id="memberForm" onsubmit="submitMember(event)">
+                <div class="form-row">
+                    <div class="input-group stt-group">
+                        <label>STT</label>
+                        <input type="number" id="m_stt" placeholder="VD: 1" required>
+                    </div>
+                    <div class="input-group maso-group">
+                        <label>Mã Số</label>
+                        <input type="text" id="m_maso" placeholder="VD: M001" required>
+                    </div>
+                    <div class="input-group ten-group">
+                        <label>Tên Thành Viên</label>
+                        <input type="text" id="m_ten" placeholder="Nhập tên..." required>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="input-group class-group">
+                        <label>Class</label>
+                        <input type="text" id="m_class" placeholder="VD: DK" required>
+                    </div>
+                    <div class="input-group heso-group">
+                        <label>Hệ Số</label>
+                        <input type="number" id="m_heso" step="0.1" placeholder="VD: 1.0" required>
+                    </div>
+                    <div class="input-group diem-group">
+                        <label>Quân Công</label>
+                        <input type="number" id="m_diem" placeholder="VD: 0" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-confirm" id="btnSubmitMember">Thêm Mới</button>
+                        <button type="button" class="btn btn-cancel" id="btnCancelEdit" style="display:none;" onclick="cancelEdit()">Hủy</button>
+                    </div>
+                </div>
+            </form>
+
+            <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                <table class="manage-table">
+                    <thead>
+                        <tr>
+                            <th>STT</th>
+                            <th>Mã Số</th>
+                            <th>Tên</th>
+                            <th>Class</th>
+                            <th>Hệ Số</th>
+                            <th>Quân Công</th>
+                            <th>Hành Động</th>
+                        </tr>
+                    </thead>
+                    <tbody id="manageTableBody">
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-cancel" onclick="closeManageModal()">Đóng Cửa Sổ</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // MẬT KHẨU MÃ HÓA BASE64 (ADMIN & MOD)
+        // Admin: adminquanlyquancong -> YWRtaW5xdWFubHlxdWFuY29uZw==
+        // Mod:   modquanlyquancong   -> bW9kcXVhbmx5cXVhbmNvbmc=
+        // ==========================================
+        const ENCODED_ADMIN = "YWRtaW5xdWFubHlxdWFuY29uZw==";
+        const ENCODED_MOD = "bW9kcXVhbmx5cXVhbmNvbmc=";
+
+        let currentRole = localStorage.getItem('mu_user_role') || 'guest'; // 'admin', 'mod', 'guest'
+
+        function checkAuthUI() {
+            const updateElements = document.querySelectorAll('.update-controls');
+            const manageElements = document.querySelectorAll('.manage-controls');
+            const adminElements = document.querySelectorAll('.admin-only');
+            const authBtn = document.getElementById('authBtn');
+            const dropZone = document.getElementById('dropZone');
+
+            if (currentRole === 'admin') {
+                updateElements.forEach(el => el.style.display = (el.id === 'dropZone') ? 'flex' : 'inline-block');
+                manageElements.forEach(el => el.style.display = 'inline-block');
+                adminElements.forEach(el => el.style.display = 'inline-block');
+                authBtn.innerText = "🔓 Đăng Xuất (Admin)";
+                authBtn.style.backgroundColor = "#c62828";
+            } else if (currentRole === 'mod') {
+                updateElements.forEach(el => el.style.display = (el.id === 'dropZone') ? 'flex' : 'inline-block');
+                manageElements.forEach(el => el.style.display = 'none');
+                adminElements.forEach(el => el.style.display = 'none');
+                authBtn.innerText = "🔓 Đăng Xuất (Mod)";
+                authBtn.style.backgroundColor = "#ef6c00";
+            } else {
+                updateElements.forEach(el => el.style.display = 'none');
+                manageElements.forEach(el => el.style.display = 'none');
+                adminElements.forEach(el => el.style.display = 'none');
+                if (dropZone) dropZone.style.display = 'none';
+                authBtn.innerText = "🔐 Đăng Nhập Quyền Quản Lý";
+                authBtn.style.backgroundColor = "#d32f2f";
+            }
+        }
+
+        function toggleAuth() {
+            if (currentRole !== 'guest') {
+                currentRole = 'guest';
+                localStorage.setItem('mu_user_role', 'guest');
+                checkAuthUI();
+                showToast("🔒 Đã đăng xuất hệ thống.");
+            } else {
+                document.getElementById('adminPassword').value = '';
+                document.getElementById('loginModal').style.display = 'flex';
+                setTimeout(() => document.getElementById('adminPassword').focus(), 100);
+            }
+        }
+
+        function closeLoginModal() {
+            document.getElementById('loginModal').style.display = 'none';
+        }
+
+        function checkPassword() {
+            const pwdInput = document.getElementById('adminPassword').value.trim();
+            try {
+                const adminPass = atob(ENCODED_ADMIN);
+                const modPass = atob(ENCODED_MOD);
+
+                if (pwdInput === adminPass) {
+                    currentRole = 'admin';
+                    localStorage.setItem('mu_user_role', 'admin');
+                    closeLoginModal();
+                    checkAuthUI();
+                    showToast("🎉 Đăng nhập thành công quyền Admin!");
+                } else if (pwdInput === modPass) {
+                    currentRole = 'mod';
+                    localStorage.setItem('mu_user_role', 'mod');
+                    closeLoginModal();
+                    checkAuthUI();
+                    showToast("🎉 Đăng nhập thành công quyền Mod!");
+                } else {
+                    showToast("❌ Mật khẩu không chính xác!");
+                    document.getElementById('adminPassword').value = '';
+                }
+            } catch (e) {
+                showToast("❌ Lỗi hệ thống xác thực!");
+            }
+        }
+        // ==========================================
+
+        const defaultData = [];
+        let quanCongData = JSON.parse(localStorage.getItem('mu_quancong_data')) || defaultData;
+        let updateHistory = JSON.parse(localStorage.getItem('mu_quancong_history')) || [];
+
+        function saveDataLocally() {
+            localStorage.setItem('mu_quancong_data', JSON.stringify(quanCongData));
+        }
+        function saveHistoryLocally() {
+            localStorage.setItem('mu_quancong_history', JSON.stringify(updateHistory));
+        }
+
+        let myChart = null;
+        let currentSort = { key: 'quanCong', dir: 'desc' }; 
+
+        const dropZone = document.getElementById('dropZone');
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            if (dropZone) dropZone.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        if (dropZone) {
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+            });
+
+            dropZone.addEventListener('drop', handleDrop, false);
+        }
+
+        function handleDrop(e) {
+            if (currentRole === 'guest') return;
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            if (files && files.length > 0) {
+                if(files[0].type.startsWith('image/')) {
+                    processImageFile(files[0]);
+                } else {
+                    showStatus("Vui lòng thả file hình ảnh.", "error");
+                }
+            }
+        }
+
+        document.addEventListener('paste', function(e) {
+            if (currentRole === 'guest') return;
+            const clipboardData = e.clipboardData || window.clipboardData;
+            if (!clipboardData) return;
+            
+            const items = clipboardData.items;
+            
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item.kind === 'file' && item.type.startsWith('image/')) {
+                    e.preventDefault(); 
+                    const blob = item.getAsFile();
+                    processImageFile(blob);
+                    
+                    if (dropZone) dropZone.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    return; 
+                }
+            }
+        });
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                processImageFile(file);
+            }
+            event.target.value = '';
+        }
+
+        function showStatus(message, type = "info") {
+            const statusDiv = document.getElementById("ocrStatus");
+            if (!statusDiv) return;
+            statusDiv.innerText = message;
+            if (type === "error") statusDiv.style.color = "#d32f2f";
+            else if (type === "success") statusDiv.style.color = "#2e7d32";
+            else statusDiv.style.color = "#1565c0";
+        }
+
+        async function processImageFile(file) {
+            if (!file) return;
+
+            const resultArea = document.getElementById("resultArea");
+            const textarea = document.getElementById("ocrResultTextarea");
+            
+            showStatus("⏳ Đang phân tích hình ảnh... Vui lòng chờ...", "info");
+            if (resultArea) resultArea.style.display = "none";
+            if (textarea) textarea.value = "";
+
+            try {
+                const worker = await Tesseract.createWorker('eng'); 
+                const ret = await worker.recognize(file);
+                const textResult = ret.data.text.toUpperCase();
+                await worker.terminate();
+
+                const validCodes = quanCongData.map(p => p.maSo.toUpperCase());
+                let detectedCodes = [];
+
+                if (validCodes.length > 0) {
+                    const normalizedText = textResult.replace(/[O]/g, '0');
+                    
+                    const wordsInImage = textResult.split(/[\s\n,;\[\]\(\)-]+/).map(w => w.trim());
+                    const wordsInNormalized = normalizedText.split(/[\s\n,;\[\]\(\)-]+/).map(w => w.trim());
+                    
+                    validCodes.forEach(code => {
+                        if (wordsInImage.includes(code) || wordsInNormalized.includes(code)) {
+                            detectedCodes.push(code);
+                        } else {
+                            const escapedCode = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            const regex = new RegExp(`(^|[^A-Z0-9_])(${escapedCode})([^A-Z0-9_]|$)`);
+                            if (regex.test(textResult) || regex.test(normalizedText)) {
+                                if (!detectedCodes.includes(code)) detectedCodes.push(code);
+                            }
+                        }
+                    });
+                } else {
+                    const rawWords = textResult.split(/[\s\n]+/).map(w => w.trim()).filter(w => w.length > 0);
+                    detectedCodes = rawWords.filter(w => /[A-Z0-9]{2,}/.test(w));
+                }
+                
+                detectedCodes = [...new Set(detectedCodes)];
+                
+                if (detectedCodes.length > 0) {
+                    if (textarea) textarea.value = detectedCodes.join('\n');
+                    if (resultArea) resultArea.style.display = "flex";
+                    showStatus("✅ Đã quét và đối chiếu đúng mã số! Vui lòng ấn [Cập Nhật Dữ Liệu].", "success");
+                } else {
+                    if (textarea) textarea.value = textResult;
+                    if (resultArea) resultArea.style.display = "flex";
+                    showStatus("⚠️ Không tìm thấy mã nào khớp với Danh Sách Thành Viên.", "error");
+                }
+
+            } catch (error) {
+                console.error(error);
+                showStatus("❌ Lỗi trong quá trình nhận diện ảnh.", "error");
+            }
+        }
+
+        let modalConfirmCallback = null;
+
+        function showConfirmModal(messageHTML, onConfirm) {
+            document.getElementById('modalMessage').innerHTML = messageHTML;
+            document.getElementById('confirmModal').style.display = 'flex';
+            modalConfirmCallback = onConfirm;
+        }
+
+        function closeModal(isConfirmed) {
+            document.getElementById('confirmModal').style.display = 'none';
+            if (isConfirmed && modalConfirmCallback) {
+                modalConfirmCallback();
+            } else if (!isConfirmed) {
+                showToast("🛑 Đã hủy cập nhật. Dữ liệu chưa bị thay đổi.");
+            }
+            modalConfirmCallback = null; 
+        }
+
+        function updateData() {
+            if (currentRole === 'guest') return;
+            const resultArea = document.getElementById("resultArea");
+            const textarea = document.getElementById("ocrResultTextarea");
+            if (!textarea) return;
+            const textContent = textarea.value.toUpperCase();
+
+            if (resultArea.style.display === "none" || !textContent.trim()) {
+                showToast("⚠️ Vui lòng thả ảnh hoặc dán mã số vào ô văn bản trước khi cập nhật.");
+                return;
+            }
+
+            const words = textContent.split(/[\s\n,;]+/).map(word => word.trim());
+            const validCodes = quanCongData.map(p => p.maSo.toUpperCase());
+            
+            let detectedCodes = words.filter(word => validCodes.includes(word));
+            detectedCodes = [...new Set(detectedCodes)];
+
+            if (detectedCodes.length > 0) {
+                const messageHTML = `
+                    <b>CHÚ Ý:</b> Đã quét được <b>${detectedCodes.length}</b> mã số hợp lệ:<br>
+                    <span style="color: #1976d2; font-weight: bold;">${detectedCodes.join(', ')}</span><br><br>
+                    Công thức tính: <b>(1 điểm cơ bản x Hệ số từng thành viên) + Quân công cũ</b>.<br>
+                    Bạn có chắc chắn muốn <b>CỘNG ĐIỂM</b> cho danh sách này không?
+                `;
+                
+                showConfirmModal(messageHTML, function() {
+                    updatePointsByCodes(detectedCodes);
+                    textarea.value = "";
+                    resultArea.style.display = "none";
+                    showStatus("✅ Đã cập nhật điểm xong.", "success");
+                });
+
+            } else {
+                showToast("⚠️ Không tìm thấy mã số nào hợp lệ (VD: M001) trong ô chữ.");
+            }
+        }
+
+        function updatePointsByCodes(codesArray) {
+            let updatedCount = 0;
+            let updateDetails = [];
+            
+            codesArray.forEach(code => {
+                const person = quanCongData.find(p => p.maSo.toUpperCase() === code);
+                if (person) {
+                    const diemCongThem = parseFloat((1 * person.heSo).toFixed(1)); 
+                    person.quanCong += diemCongThem; 
+                    
+                    updatedCount++;
+                    updateDetails.push(`${person.ten} (+${diemCongThem})`);
+                }
+            });
+
+            if (updatedCount > 0) {
+                saveDataLocally(); 
+                
+                const timeString = new Date().toLocaleString('vi-VN');
+                updateHistory.unshift({
+                    time: timeString,
+                    detail: `Đã cộng điểm cho ${updatedCount} thành viên: ${updateDetails.join(', ')}`
+                });
+                
+                if (updateHistory.length > 30) updateHistory.pop();
+                saveHistoryLocally();
+
+                showToast(`🎉 Thành công! Đã cập nhật điểm cho ${updatedCount} thành viên.`);
+                sortData(currentSort.key, true); 
+            } else {
+                showToast(`⚠️ Các mã số quét được không nằm trong danh sách bảng của bạn.`);
+            }
+        }
+
+        function openHistoryModal() {
+            const historyListDiv = document.getElementById('historyList');
+            historyListDiv.innerHTML = '';
+            
+            if (updateHistory.length === 0) {
+                historyListDiv.innerHTML = '<div class="history-item">Chưa có lịch sử cập nhật nào.</div>';
+            } else {
+                updateHistory.forEach(record => {
+                    const item = document.createElement('div');
+                    item.className = 'history-item';
+                    item.innerHTML = `
+                        <span class="history-time">📅 ${record.time}</span>
+                        ${record.detail}
+                    `;
+                    historyListDiv.appendChild(item);
+                });
+            }
+            document.getElementById('historyModal').style.display = 'flex';
+        }
+
+        function closeHistoryModal() {
+            document.getElementById('historyModal').style.display = 'none';
+        }
+
+        function clearHistory() {
+            if (currentRole !== 'admin') {
+                showToast("⚠️ Chỉ có tài khoản Quản Trị Viên (Admin) mới được phép xóa lịch sử!");
+                return;
+            }
+            if (confirm('Bạn có chắc muốn xóa toàn bộ lịch sử không?')) {
+                updateHistory = [];
+                saveHistoryLocally();
+                openHistoryModal();
+                showToast('Đã xóa toàn bộ lịch sử.');
+            }
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById("toast");
+            toast.innerText = message;
+            toast.className = "show";
+            setTimeout(function(){ 
+                toast.className = toast.className.replace("show", ""); 
+            }, 3000);
+        }
+
+        function renderTable() {
+            const tableBody = document.getElementById('tableBody');
+            if (!tableBody) return;
+            tableBody.innerHTML = ''; 
+
+            quanCongData.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${row.stt}</td>
+                    <td>${row.maSo}</td>
+                    <td>${row.ten}</td>
+                    <td>${row.lop}</td>
+                    <td>${row.heSo}</td>
+                    <td>${row.quanCong}</td>
+                `;
+                tableBody.appendChild(tr);
+            });
+        }
+
+        function drawChart() {
+            const labels = quanCongData.map(row => row.ten);
+            const dataPoints = quanCongData.map(row => row.quanCong);
+
+            const canvas = document.getElementById('quanCongChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            
+            if (myChart) {
+                myChart.destroy();
+            }
+
+            const calculatedHeight = Math.max(400, labels.length * 35);
+            document.getElementById('canvasWrapper').style.height = calculatedHeight + 'px';
+
+            myChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Điểm Quân Công',
+                        data: dataPoints,
+                        backgroundColor: 'rgba(81, 45, 168, 0.7)',
+                        borderColor: 'rgba(81, 45, 168, 1)',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    indexAxis: 'y', 
+                    maintainAspectRatio: false,
+                    responsive: true,
+                    scales: {
+                        x: { beginAtZero: true }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        function sortData(key, forceSort = false) {
+            if (!forceSort) {
+                if (currentSort.key === key) {
+                    currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
+                } else {
+                    currentSort.key = key;
+                    currentSort.dir = 'desc'; 
+                }
+            }
+
+            quanCongData.sort((a, b) => {
+                let valA = a[currentSort.key];
+                let valB = b[currentSort.key];
+
+                if (typeof valA === 'string') valA = valA.toLowerCase();
+                if (typeof valB === 'string') valB = valB.toLowerCase();
+
+                if (valA < valB) return currentSort.dir === 'asc' ? -1 : 1;
+                if (valA > valB) return currentSort.dir === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            renderTable();
+            drawChart();
+        }
+
+        window.onload = function() {
+            checkAuthUI();
+            sortData('quanCong', true);
+        }
+
+        let editingMaSo = null;
+
+        function openManageModal() {
+            if (currentRole !== 'admin') return;
+            document.getElementById('manageModal').style.display = 'flex';
+            renderManageTable();
+            cancelEdit(); 
+        }
+
+        function closeManageModal() {
+            document.getElementById('manageModal').style.display = 'none';
+        }
+
+        function renderManageTable() {
+            const tbody = document.getElementById('manageTableBody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            
+            const sortedData = [...quanCongData].sort((a, b) => a.stt - b.stt);
+            
+            sortedData.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${row.stt}</td>
+                    <td>${row.maSo}</td>
+                    <td>${row.ten}</td>
+                    <td>${row.lop}</td>
+                    <td>${row.heSo}</td>
+                    <td>${row.quanCong}</td>
+                    <td>
+                        <button class="action-btn btn-edit" onclick="editMember('${row.maSo}')">✏️ Sửa</button>
+                        <button class="action-btn btn-delete" onclick="deleteMember('${row.maSo}')">🗑️ Xóa</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function submitMember(e) {
+            e.preventDefault();
+            if (currentRole !== 'admin') return;
+            
+            const stt = parseInt(document.getElementById('m_stt').value);
+            const maSo = document.getElementById('m_maso').value.trim().toUpperCase();
+            const ten = document.getElementById('m_ten').value.trim();
+            const lop = document.getElementById('m_class').value.trim();
+            const heSo = parseFloat(document.getElementById('m_heso').value);
+            const quanCong = parseFloat(document.getElementById('m_diem').value);
+
+            if (editingMaSo) {
+                if (maSo !== editingMaSo && quanCongData.some(p => p.maSo === maSo)) {
+                    alert("Mã số này đã tồn tại, vui lòng chọn mã khác!");
+                    return;
+                }
+                const idx = quanCongData.findIndex(p => p.maSo === editingMaSo);
+                if (idx !== -1) {
+                    quanCongData[idx] = { stt, maSo, ten, lop, heSo, quanCong };
+                }
+            } else {
+                if (quanCongData.some(p => p.maSo === maSo)) {
+                    alert("Mã số này đã tồn tại trong danh sách!");
+                    return;
+                }
+                quanCongData.push({ stt, maSo, ten, lop, heSo, quanCong });
+            }
+
+            saveDataLocally();
+            renderManageTable();
+            sortData(currentSort.key, true);
+            cancelEdit();
+            showToast(editingMaSo ? "Đã cập nhật thành viên!" : "Đã thêm thành viên mới!");
+        }
+
+        function editMember(maSo) {
+            if (currentRole !== 'admin') return;
+            const person = quanCongData.find(p => p.maSo === maSo);
+            if (person) {
+                document.getElementById('m_stt').value = person.stt;
+                document.getElementById('m_maso').value = person.maSo;
+                document.getElementById('m_ten').value = person.ten;
+                document.getElementById('m_class').value = person.lop;
+                document.getElementById('m_heso').value = person.heSo;
+                document.getElementById('m_diem').value = person.quanCong;
+                
+                editingMaSo = person.maSo;
+                document.getElementById('btnSubmitMember').innerText = "Cập Nhật";
+                document.getElementById('btnCancelEdit').style.display = "inline-block";
+            }
+        }
+
+        function deleteMember(maSo) {
+            if (currentRole !== 'admin') return;
+            if (confirm(`Bạn có chắc muốn xóa thành viên mã [ ${maSo} ] khỏi danh sách không?`)) {
+                quanCongData = quanCongData.filter(p => p.maSo !== maSo);
+                saveDataLocally();
+                renderManageTable();
+                sortData(currentSort.key, true);
+                showToast("Đã xóa thành viên.");
+            }
+        }
+
+        function cancelEdit() {
+            document.getElementById('memberForm').reset();
+            editingMaSo = null;
+            document.getElementById('btnSubmitMember').innerText = "Thêm Mới";
+            document.getElementById('btnCancelEdit').style.display = "none";
+            
+            const nextStt = quanCongData.length > 0 ? Math.max(...quanCongData.map(p => p.stt)) + 1 : 1;
+            document.getElementById('m_stt').value = nextStt;
+            document.getElementById('m_diem').value = 0;
+            document.getElementById('m_heso').value = 1.0;
+        }
+
+        function takeScreenshot() {
+            showToast("⏳ Đang xử lý hình ảnh, vui lòng chờ...");
+            const captureElement = document.getElementById('captureArea');
+            
+            html2canvas(captureElement, {
+                scale: 3, 
+                backgroundColor: '#f4f6f9',
+                useCORS: true 
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'Bang_Quan_Cong_FullHD.png';
+                link.href = canvas.toDataURL('image/png', 1.0);
+                link.click();
+                showToast("✅ Đã tải ảnh xuống thành công!");
+            }).catch(err => {
+                console.error(err);
+                showToast("❌ Có lỗi xảy ra khi chụp ảnh!");
+            });
+        }
+    </script>
+</body>
+</html>
