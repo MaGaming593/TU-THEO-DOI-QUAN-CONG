@@ -434,6 +434,31 @@
             display: none;
         }
 
+        /* Overlay tải dữ liệu (Loading) */
+        #loadingOverlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(255,255,255,0.8);
+            z-index: 3000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border-left-color: #0984e3;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideDown {
             from { transform: translateY(-20px); opacity: 0; }
@@ -442,6 +467,12 @@
     </style>
 </head>
 <body>
+    
+    <!-- Màn hình chờ tải dữ liệu từ Google Sheets -->
+    <div id="loadingOverlay">
+        <div class="spinner"></div>
+        <span>Đang đồng bộ dữ liệu từ Server...</span>
+    </div>
 
     <!-- Khu vực chức năng OCR Nhận diện ảnh (Dành cho Mod & Admin) -->
     <div class="ocr-container update-controls" id="dropZone">
@@ -610,14 +641,19 @@
 
     <script>
         // ==========================================
-        // MẬT KHẨU MÃ HÓA BASE64 (ADMIN & MOD)
-        // Admin: adminquanlyquancong -> YWRtaW5xdWFubHlxdWFuY29uZw==
-        // Mod:   modquanlyquancong   -> bW9kcXVhbmx5cXVhbmNvbmc=
+        // KHU VỰC CẤU HÌNH LIÊN KẾT GOOGLE SHEETS
         // ==========================================
+        // BẠN HÃY THAY LINK SCRIPT CỦA BẠN VÀO GIỮA 2 DẤU NGOẶC KÉP BÊN DƯỚI NÀY
+        const GOOGLE_SHEET_URL = "https://script.googleusercontent.com/macros/echo?user_content_key=AUkAhnQScVRIGibn51_eortdm0GLm_ZxTh0TNeyaIHfP5pzCKkS-KLp8vbiQ--Ghzw7y-7ia8JeDekZXptefnOf7GDV9EgxlHBc3-b8CQGy6MJHQ5aHu2v-_nhwmkEn8YtvT3jxYhl4MSfvMdGXz-pwPYtoZSpjDWEwixvZclY0Un8wOgE5HheEK56s22_e1k52IrwaWejKVuqTNn0vXdQcB6_Yxqcik2dKynLEK14UloPFVWIBv8pdJZOyv339zMA3CyESvqchxU_IrZP4euKxiKTptcNgvwg&lib=Mxa1z_pNH9Pe-t522Lr_xP8lvjbIvZS7r";
+        
+        // MẬT KHẨU MÃ HÓA BASE64 (ADMIN & MOD)
         const ENCODED_ADMIN = "YWRtaW5xdWFubHlxdWFuY29uZw==";
         const ENCODED_MOD = "bW9kcXVhbmx5cXVhbmNvbmc=";
 
-        let currentRole = localStorage.getItem('mu_user_role') || 'guest'; // 'admin', 'mod', 'guest'
+        let currentRole = localStorage.getItem('mu_user_role') || 'guest';
+        
+        let quanCongData = [];
+        let updateHistory = [];
 
         function checkAuthUI() {
             const updateElements = document.querySelectorAll('.update-controls');
@@ -691,18 +727,68 @@
                 showToast("❌ Lỗi hệ thống xác thực!");
             }
         }
+
+        // ==========================================
+        // CÁC HÀM GIAO TIẾP VỚI GOOGLE SHEETS
+        // ==========================================
+        
+        async function fetchFromGoogleSheets() {
+            try {
+                // Tải dữ liệu Bảng điểm
+                const resData = await fetch(GOOGLE_SHEET_URL);
+                const dataText = await resData.text();
+                quanCongData = JSON.parse(dataText);
+
+                // Tải dữ liệu Lịch sử
+                const resHistory = await fetch(GOOGLE_SHEET_URL + "?action=getHistory");
+                const historyText = await resHistory.text();
+                updateHistory = JSON.parse(historyText);
+
+                // Ép kiểu số liệu cho chuẩn
+                quanCongData.forEach(p => {
+                    p.stt = parseInt(p.stt) || 0;
+                    p.heSo = parseFloat(p.heso) || parseFloat(p.heSo) || 1.0;
+                    p.quanCong = parseFloat(p.quancong) || parseFloat(p.quanCong) || 0;
+                    p.maSo = p.maso || p.maSo || "";
+                    p.ten = p.ten || "";
+                    p.lop = p.class || p.lop || "";
+                });
+
+                document.getElementById('loadingOverlay').style.display = 'none';
+                sortData('quanCong', true);
+            } catch (error) {
+                console.error("Lỗi tải dữ liệu:", error);
+                document.getElementById('loadingOverlay').innerHTML = `<h3 style="color:red">LỖI TẢI DỮ LIỆU</h3><p>Vui lòng kiểm tra lại link Google Sheets của bạn!</p>`;
+            }
+        }
+
+        // Hàm này sẽ Đẩy dữ liệu lên Google Sheets để lưu
+        async function pushDataToSheets(actionType, payloadData) {
+            document.getElementById('loadingOverlay').innerHTML = '<div class="spinner"></div><span>Đang lưu dữ liệu lên hệ thống...</span>';
+            document.getElementById('loadingOverlay').style.display = 'flex';
+
+            try {
+                const response = await fetch(GOOGLE_SHEET_URL, {
+                    method: 'POST',
+                    mode: 'no-cors', // Rất quan trọng khi post tới Google Script từ Github Pages
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: actionType,
+                        payload: payloadData
+                    })
+                });
+                
+                document.getElementById('loadingOverlay').style.display = 'none';
+                return true;
+            } catch (error) {
+                console.error("Lỗi lưu dữ liệu:", error);
+                document.getElementById('loadingOverlay').style.display = 'none';
+                showToast("❌ Lỗi: Không thể lưu dữ liệu lên Server!");
+                return false;
+            }
+        }
         // ==========================================
 
-        const defaultData = [];
-        let quanCongData = JSON.parse(localStorage.getItem('mu_quancong_data')) || defaultData;
-        let updateHistory = JSON.parse(localStorage.getItem('mu_quancong_history')) || [];
-
-        function saveDataLocally() {
-            localStorage.setItem('mu_quancong_data', JSON.stringify(quanCongData));
-        }
-        function saveHistoryLocally() {
-            localStorage.setItem('mu_quancong_history', JSON.stringify(updateHistory));
-        }
 
         let myChart = null;
         let currentSort = { key: 'quanCong', dir: 'desc' }; 
@@ -896,7 +982,7 @@
             }
         }
 
-        function updatePointsByCodes(codesArray) {
+        async function updatePointsByCodes(codesArray) {
             let updatedCount = 0;
             let updateDetails = [];
             
@@ -912,7 +998,8 @@
             });
 
             if (updatedCount > 0) {
-                saveDataLocally(); 
+                // Đẩy dữ liệu bảng điểm mới lên Sheets
+                await pushDataToSheets('updateData', quanCongData);
                 
                 const timeString = new Date().toLocaleString('vi-VN');
                 updateHistory.unshift({
@@ -921,9 +1008,11 @@
                 });
                 
                 if (updateHistory.length > 30) updateHistory.pop();
-                saveHistoryLocally();
+                
+                // Đẩy lịch sử lên Sheets
+                await pushDataToSheets('updateHistory', updateHistory);
 
-                showToast(`🎉 Thành công! Đã cập nhật điểm cho ${updatedCount} thành viên.`);
+                showToast(`🎉 Thành công! Đã lưu cập nhật cho ${updatedCount} người lên máy chủ.`);
                 sortData(currentSort.key, true); 
             } else {
                 showToast(`⚠️ Các mã số quét được không nằm trong danh sách bảng của bạn.`);
@@ -954,14 +1043,14 @@
             document.getElementById('historyModal').style.display = 'none';
         }
 
-        function clearHistory() {
+        async function clearHistory() {
             if (currentRole !== 'admin') {
-                showToast("⚠️ Chỉ có tài khoản Quản Trị Viên (Admin) mới được phép xóa lịch sử!");
+                showToast("⚠️ Chỉ có Quản Trị Viên mới được phép xóa lịch sử!");
                 return;
             }
-            if (confirm('Bạn có chắc muốn xóa toàn bộ lịch sử không?')) {
+            if (confirm('Bạn có chắc muốn xóa toàn bộ lịch sử trên máy chủ không?')) {
                 updateHistory = [];
-                saveHistoryLocally();
+                await pushDataToSheets('updateHistory', updateHistory);
                 openHistoryModal();
                 showToast('Đã xóa toàn bộ lịch sử.');
             }
@@ -1065,7 +1154,15 @@
 
         window.onload = function() {
             checkAuthUI();
-            sortData('quanCong', true);
+            
+            // Nếu có link GOOGLE SHEET, hệ thống sẽ ưu tiên tải từ Server
+            if (GOOGLE_SHEET_URL && GOOGLE_SHEET_URL.includes("script.google.com")) {
+                fetchFromGoogleSheets();
+            } else {
+                // Nếu chưa điền link, chỉ tải demo hoặc local storage
+                document.getElementById('loadingOverlay').style.display = 'none';
+                sortData('quanCong', true);
+            }
         }
 
         let editingMaSo = null;
@@ -1106,7 +1203,7 @@
             });
         }
 
-        function submitMember(e) {
+        async function submitMember(e) {
             e.preventDefault();
             if (currentRole !== 'admin') return;
             
@@ -1134,11 +1231,13 @@
                 quanCongData.push({ stt, maSo, ten, lop, heSo, quanCong });
             }
 
-            saveDataLocally();
+            // Đẩy bảng lên Google Sheets sau khi thêm sửa
+            await pushDataToSheets('updateData', quanCongData);
+            
             renderManageTable();
             sortData(currentSort.key, true);
             cancelEdit();
-            showToast(editingMaSo ? "Đã cập nhật thành viên!" : "Đã thêm thành viên mới!");
+            showToast(editingMaSo ? "Đã cập nhật thành viên lên máy chủ!" : "Đã thêm thành viên mới lên máy chủ!");
         }
 
         function editMember(maSo) {
@@ -1158,14 +1257,16 @@
             }
         }
 
-        function deleteMember(maSo) {
+        async function deleteMember(maSo) {
             if (currentRole !== 'admin') return;
             if (confirm(`Bạn có chắc muốn xóa thành viên mã [ ${maSo} ] khỏi danh sách không?`)) {
                 quanCongData = quanCongData.filter(p => p.maSo !== maSo);
-                saveDataLocally();
+                
+                await pushDataToSheets('updateData', quanCongData);
+                
                 renderManageTable();
                 sortData(currentSort.key, true);
-                showToast("Đã xóa thành viên.");
+                showToast("Đã xóa thành viên trên máy chủ.");
             }
         }
 
